@@ -439,8 +439,8 @@ class Syncer:
                     elif typ is int:
                         v = int(v)
                     data[col] = v
-                if coll in ("tasks", "events", "templates", "sheets") and not str(data.get(
-                        {"templates": "name", "sheets": "name"}.get(coll, "title"), "")).strip():
+                if coll in ("tasks", "events", "templates", "sheets", "decks") and not str(data.get(
+                        {"templates": "name", "sheets": "name", "decks": "name"}.get(coll, "title"), "")).strip():
                     continue  # incomplete document (e.g. edited on one side, deleted on the other)
                 remote_updated = dec(fields.get("updated")) or ""
                 data["created"] = dec(fields.get("created")) or remote_updated

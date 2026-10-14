@@ -26,7 +26,9 @@ from . import mail, sync
 from .db import Database
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-CRUD_TABLES = ("tasks", "events", "notes", "templates", "sheets")
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+SHARED_FILES = {"slides.js"}  # served from web/ so both versions share one copy
+CRUD_TABLES = ("tasks", "events", "notes", "templates", "sheets", "decks")
 MAX_UPLOAD = 1024 * 1024 * 1024  # 1 GiB
 
 
@@ -300,6 +302,8 @@ class Workspace:
             "notes": self.db.list("notes", "title LIKE ? OR body LIKE ? OR tags LIKE ?",
                                   (like, like, like), order="updated DESC", limit=20),
             "sheets": self.db.list("sheets", "name LIKE ? OR data LIKE ?", (like, like), limit=20),
+            "decks": [{k: d[k] for k in ("id", "name", "updated")} for d in
+                      self.db.list("decks", "name LIKE ? OR data LIKE ?", (like, like), limit=20)],
             "files": self.search_files(term, limit=20),
         }
 
@@ -323,7 +327,7 @@ class Workspace:
 
     def export_json(self):
         """Export everything in the format the web version imports."""
-        prefix = {"tasks": "t", "events": "e", "notes": "n", "templates": "m", "sheets": "s"}
+        prefix = {"tasks": "t", "events": "e", "notes": "n", "templates": "m", "sheets": "s", "decks": "d"}
         out = {"format": "myworkspace", "version": 1, "exported": datetime.now().isoformat(timespec="seconds"),
                "collections": {}, "files": []}
         for table, p in prefix.items():
@@ -491,8 +495,8 @@ def make_handler(ws, port):
 
         def serve_static(self, path):
             name = "index.html" if path in ("/", "") else path.lstrip("/")
-            target = (STATIC_DIR / name).resolve()
-            if STATIC_DIR not in target.parents or not target.is_file():
+            target = (WEB_DIR / name if name in SHARED_FILES else STATIC_DIR / name).resolve()
+            if not (STATIC_DIR in target.parents or name in SHARED_FILES) or not target.is_file():
                 raise ApiError(404, "not found")
             ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
             if ctype.startswith("text/") or ctype.endswith("javascript"):
@@ -552,7 +556,7 @@ def make_handler(ws, port):
                         return ws.list_events(q)
                     if table == "notes":
                         return ws.list_notes(q)
-                    cols = "id, name, created, updated" if table == "sheets" else "*"
+                    cols = "id, name, created, updated" if table in ("sheets", "decks") else "*"
                     with ws.db.connect() as conn:
                         return [dict(r) for r in conn.execute(
                             "SELECT %s FROM %s ORDER BY updated DESC" % (cols, table))]

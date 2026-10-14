@@ -20,6 +20,7 @@ const SCHEMA = {
   notes: { title: 's', body: 's', tags: 's', pinned: 'i' },
   templates: { name: 's', subject: 's', body: 's' },
   sheets: { name: 's', data: 's' },
+  decks: { name: 's', data: 's' },
 };
 const DEFAULTS = {
   tasks: { notes: '', due: '', priority: 1, project: '', done: 0, repeat: '' },
@@ -27,8 +28,9 @@ const DEFAULTS = {
   notes: { title: '', body: '', tags: '', pinned: 0 },
   templates: { subject: '', body: '' },
   sheets: { data: '[]' },
+  decks: { data: '{}' },
 };
-const REQUIRED = { tasks: 'title', events: 'title', templates: 'name', sheets: 'name' };
+const REQUIRED = { tasks: 'title', events: 'title', templates: 'name', sheets: 'name', decks: 'name' };
 
 export const DEFAULT_SETTINGS = {
   file_rules: [
@@ -339,6 +341,7 @@ export function createApi(store) {
       events: sortBy(store.all('events').filter(e => like(e.title, q) || like(e.notes, q) || like(e.location, q)), (a, b) => cmp(b.start, a.start)).slice(0, 20),
       notes: listNotes({ q }).slice(0, 20),
       sheets: store.all('sheets').filter(s => like(s.name, q) || like(s.data, q)).slice(0, 20),
+      decks: store.all('decks').filter(d => like(d.name, q) || like(d.data, q)).slice(0, 20).map(({ data, ...d }) => d),
       files: files().filter(f => like(f.name, q)).slice(0, 20).map(f => ({ name: f.name, path: pathOf(f), dir: !!f.dir })),
     };
   }
@@ -391,7 +394,7 @@ export function createApi(store) {
 
   // ---- router ----
 
-  const CRUD = ['tasks', 'events', 'notes', 'templates', 'sheets'];
+  const CRUD = ['tasks', 'events', 'notes', 'templates', 'sheets', 'decks'];
 
   async function route(method, path, body) {
     const [p, qs = ''] = path.split('?');
@@ -409,7 +412,7 @@ export function createApi(store) {
           if (head === 'events') return listEvents(q);
           if (head === 'notes') return listNotes(q);
           const list = sortBy(store.all(head), (a, b) => cmp(b.updated, a.updated));
-          return head === 'sheets' ? list.map(({ data, ...s }) => s) : list;
+          return head === 'sheets' || head === 'decks' ? list.map(({ data, ...s }) => s) : list;
         }
         if (method === 'POST') return create(head, body || {});
         throw new ApiError(405, 'method not allowed');

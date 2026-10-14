@@ -7,7 +7,7 @@
  *                      are queued on the device and uploaded automatically.
  */
 
-export const COLLECTIONS = ['tasks', 'events', 'notes', 'templates', 'sheets', 'files', 'meta'];
+export const COLLECTIONS = ['tasks', 'events', 'notes', 'templates', 'sheets', 'decks', 'files', 'meta'];
 export const CHUNK = 700 * 1024; // bytes per file chunk (Firestore docs max out at 1 MiB)
 
 const stable = v => JSON.stringify(v, Object.keys(v || {}).sort());

@@ -1,8 +1,8 @@
 /* Service worker: serves the app shell from cache so the app opens offline.
  * Bump VERSION whenever app files change so devices pick up the update. */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = 'workspace-' + VERSION;
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'api.js', 'store.js', 'config.js',
+const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'api.js', 'store.js', 'slides.js', 'config.js',
   'vendor/firebase.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

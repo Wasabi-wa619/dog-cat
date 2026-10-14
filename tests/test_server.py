@@ -204,5 +204,19 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(folder["parent"], "")
         self.assertEqual(f["data"], "YWJj")
 
+    def test_decks_and_shared_slides_script(self):
+        status, deck = self.req("POST", "/api/decks", {"name": "提案書", "data": '{"slides": []}'})
+        self.assertEqual(status, 200)
+        _, lst = self.req("GET", "/api/decks")
+        self.assertEqual([d["name"] for d in lst], ["提案書"])
+        self.assertNotIn("data", lst[0])
+        _, got = self.req("GET", "/api/decks/%d" % deck["id"])
+        self.assertEqual(got["data"], '{"slides": []}')
+        status, body, res = self.req("GET", "/slides.js", raw=True)
+        self.assertEqual(status, 200)
+        self.assertIn(b"window.Slides", body)
+        status, _, _ = self.req("GET", "/config.js", raw=True)  # only whitelisted web files are shared
+        self.assertEqual(status, 404)
+
 if __name__ == "__main__":
     unittest.main()

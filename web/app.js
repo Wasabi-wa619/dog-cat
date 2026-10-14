@@ -722,6 +722,10 @@ function displayValue(v) {
   return { text: String(v), cls: '' };
 }
 
+routes.slides = (args) => window.Slides.route(view, args, {
+  api, GET, toast, fail, go, setCleanup: fn => { cleanup = fn; },
+});
+
 routes.sheets = async (args) => {
   if (args[0]) return sheetEditor(args[0]);
   const sheets = await GET('sheets');
@@ -1129,7 +1133,7 @@ routes.settings = async () => {
           <p class="muted small">予定の通知はアプリを開いている間に表示されます。</p>
         </div>
         <h2 style="margin-top:18px">ショートカット</h2>
-        <p class="small muted">/ 検索 ・ N クイック追加 ・ G→H/T/C/M/S/F/E 各画面へ移動</p>
+        <p class="small muted">/ 検索 ・ N クイック追加 ・ G→H/T/C/M/S/P/F/E 各画面へ移動</p>
       </section>
     </div>`;
   $('#ruleForm').onsubmit = async e => {
@@ -1190,6 +1194,7 @@ routes.search = async (args, params) => {
     sec('予定', r.events, e => eventLi(e, true)),
     sec('メモ', r.notes, n => `<li><a class="grow" href="#/notes/${n.id}">${esc(n.title || '無題')}</a><span class="due">${fmtDate(n.updated)}</span></li>`),
     sec('シート', r.sheets, s => `<li><a class="grow" href="#/sheets/${s.id}">${esc(s.name)}</a></li>`),
+    sec('スライド', r.decks, d => `<li><a class="grow" href="#/slides/${d.id}">▭ ${esc(d.name)}</a></li>`),
     sec('ファイル', r.files, f => `<li><a class="grow" href="#/files?path=${encodeURIComponent(f.dir ? f.path : f.path.split('/').slice(0, -1).join('/'))}">${f.dir ? '📁' : '📄'} ${esc(f.path)}</a></li>`),
   ].join('');
   view.innerHTML = `<div class="page-head"><h1>「${esc(q)}」の検索結果</h1></div>${html || '<div class="card empty">見つかりませんでした</div>'}`;
@@ -1243,14 +1248,14 @@ function quickAdd() {
   };
 }
 
-const isTyping = el => el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable || el.id === 'sheetWrap');
+const isTyping = el => el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable || el.id === 'sheetWrap' || el.id === 'slWrap');
 let gPending = false;
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) { closeModal(); return; }
   if (isTyping(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey || !$('#modal').hidden) return;
   if (gPending) {
     gPending = false;
-    const dest = { h: 'dashboard', t: 'tasks', c: 'calendar', m: 'notes', s: 'sheets', f: 'files', e: 'mail' }[e.key.toLowerCase()];
+    const dest = { h: 'dashboard', t: 'tasks', c: 'calendar', m: 'notes', s: 'sheets', p: 'slides', f: 'files', e: 'mail' }[e.key.toLowerCase()];
     if (dest) { e.preventDefault(); go('#/' + dest); }
     return;
   }
@@ -1510,7 +1515,7 @@ async function start() {
 
   // Changes from other devices: refresh the view unless the user is mid-edit.
   store.onRemoteChange(debounce(() => {
-    const editing = !$('#modal').hidden || /^#\/(notes\/|sheets\/)/.test(location.hash) ||
+    const editing = !$('#modal').hidden || /^#\/(notes\/|sheets\/|slides\/)/.test(location.hash) ||
       typingSomething();
     if (!editing) render();
   }, 400));

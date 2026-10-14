@@ -81,7 +81,9 @@ class SyncTest(unittest.TestCase):
     def test_records_both_ways(self):
         task = self.ws.db.create("tasks", {"title": "ローカルのタスク", "due": "2026-10-20"})
         note = self.ws.db.create("notes", {"title": "メモ", "body": "本文"})
+        self.ws.db.create("decks", {"name": "提案書", "data": '{"slides": []}'})
         self.sync()
+        self.assertEqual([d["name"] for d in self.remote("decks").values()], ["提案書"])
         tasks = self.remote("tasks")
         self.assertEqual([t["title"] for t in tasks.values()], ["ローカルのタスク"])
         rid = next(iter(tasks))

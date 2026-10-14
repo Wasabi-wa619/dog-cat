@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS sheets (
     created TEXT NOT NULL,
     updated TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS decks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    created TEXT NOT NULL,
+    updated TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -87,6 +94,7 @@ TABLES = {
     "notes": {"title": str, "body": str, "tags": str, "pinned": int},
     "templates": {"name": str, "subject": str, "body": str},
     "sheets": {"name": str, "data": str},
+    "decks": {"name": str, "data": str},
 }
 
 DEFAULT_SETTINGS = {
@@ -159,7 +167,7 @@ class Database:
                     raise ValueError("invalid value for %s" % col)
         if not partial:
             required = {"tasks": "title", "events": "title", "templates": "name",
-                        "sheets": "name"}.get(table)
+                        "sheets": "name", "decks": "name"}.get(table)
             if required and not str(out.get(required, "")).strip():
                 raise ValueError("%s is required" % required)
         return out
