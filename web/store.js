@@ -35,6 +35,8 @@ class BaseBackend {
   // Apply a snapshot coming from storage; returns true if the data changed.
   applyIncoming(col, id, data) {
     const cur = this.cache[col].get(id);
+    if (data && data._deleted) data = null;
+    if (data) { data = { ...data }; delete data._mt; }
     if (data === null) {
       if (!cur) return false;
       this.cache[col].delete(id);
@@ -183,7 +185,7 @@ export class FirebaseBackend extends BaseBackend {
     this.cache[col].set(id, { ...rec, id });
     this.pending.set(col, true);
     this.refreshStatus();
-    return this.track(this.fb.setDoc(this.ref(col, id), rec));
+    return this.track(this.fb.setDoc(this.ref(col, id), { ...rec, _mt: this.fb.serverTimestamp() }));
   }
   patch(col, id, fields) {
     const cur = this.cache[col].get(id);
@@ -193,13 +195,15 @@ export class FirebaseBackend extends BaseBackend {
     this.cache[col].set(id, { ...cur, ...rec });
     this.pending.set(col, true);
     this.refreshStatus();
-    return this.track(this.fb.setDoc(this.ref(col, id), rec, { merge: true }));
+    return this.track(this.fb.setDoc(this.ref(col, id), { ...rec, _mt: this.fb.serverTimestamp() }, { merge: true }));
   }
   remove(col, id) {
     this.cache[col].delete(id);
     this.pending.set(col, true);
     this.refreshStatus();
-    return this.track(this.fb.deleteDoc(this.ref(col, id)));
+    // A tombstone (not a real delete) so other devices, including the local
+    // PC version which only fetches changed documents, learn about it.
+    return this.track(this.fb.setDoc(this.ref(col, id), { _deleted: true, _mt: this.fb.serverTimestamp() }));
   }
   async putBlob(fileId, bytes) {
     const n = Math.max(1, Math.ceil(bytes.length / CHUNK));

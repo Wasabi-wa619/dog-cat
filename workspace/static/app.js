@@ -1117,12 +1117,27 @@ async function manageTemplates() {
 // ---------------------------------------------------------------------------
 
 routes.settings = async () => {
-  const s = await GET('settings');
+  const [s, sy] = await Promise.all([GET('settings'), GET('sync')]);
   const m = s.mail;
   const theme = localStorage.getItem('theme') || '';
   view.innerHTML = `
     <div class="page-head"><h1>設定</h1></div>
     <div class="grid">
+      <section class="card"><h2>Web 版と同期</h2>
+        ${!sy.configured ? '<p class="muted small">web/config.js に Firebase の設定がまだありません（README 参照）。</p>' : sy.logged_in ? `
+          <p>ログイン中: <b>${esc(sy.email)}</b><br>
+          <span class="muted small">状態: ${esc(SYNC_TEXT[sy.state] || sy.state)}${sy.last_sync ? ` ・ 最終同期 ${fmtDate(sy.last_sync)} ${fmtTime(sy.last_sync)}` : ''}${sy.pending ? ` ・ 未送信 ${sy.pending}件` : ''}</span></p>
+          ${sy.error ? `<p class="small" style="color:var(--danger)">${esc(sy.error)}</p>` : ''}
+          ${sy.skipped.length ? `<p class="small muted">20MB を超えるため同期しないファイル: ${sy.skipped.map(esc).join(', ')}</p>` : ''}
+          <div style="display:flex;gap:8px"><button class="btn primary" id="syncNow">今すぐ同期</button><button class="btn" id="syncLogout">ログアウト</button></div>` : `
+          <p class="muted small">Web 版と同じアカウント（メールアドレスとパスワード）でログインすると、タスク・予定・メモ・テンプレート・シート・ファイル（data/files）が自動で同期されます。</p>
+          <form class="form" id="syncForm">
+            <label>メールアドレス<input name="email" type="email" required autocomplete="username"></label>
+            <label>パスワード<input name="password" type="password" required autocomplete="current-password"></label>
+            <div class="actions"><button class="btn primary">ログインして同期</button></div>
+          </form>`}
+        <p class="muted small">オフラインでも普段どおり使え、つながったときに自動で同期します。</p>
+      </section>
       <section class="card"><h2>メールアカウント</h2>
         <form class="form" id="mailForm">
           <div class="row"><label>IMAP サーバー<input name="imap_host" value="${esc(m.imap_host)}" placeholder="imap.gmail.com"></label><label>ポート<input name="imap_port" type="number" value="${esc(m.imap_port)}"></label></div>
@@ -1162,6 +1177,29 @@ routes.settings = async () => {
     f.imap_port = +f.imap_port || 993;
     f.smtp_port = +f.smtp_port || 465;
     try { await api('PUT', 'settings', { mail: f }); mailState.list = null; toast('保存しました'); render(); } catch (err) { fail(err); }
+  };
+  const sf = $('#syncForm');
+  if (sf) sf.onsubmit = async e => {
+    e.preventDefault();
+    const btn = $('.primary', sf);
+    btn.disabled = true;
+    btn.textContent = 'ログイン中…';
+    try {
+      await api('POST', 'sync/login', formData(sf));
+      toast('ログインしました。同期を開始します');
+      render();
+    } catch (err) { fail(err); btn.disabled = false; btn.textContent = 'ログインして同期'; }
+  };
+  const sn = $('#syncNow');
+  if (sn) sn.onclick = async () => {
+    sn.disabled = true;
+    sn.textContent = '同期中…';
+    try { const r = await api('POST', 'sync/now'); updateSync(r); toast(r.error || '同期しました', !!r.error); render(); } catch (err) { fail(err); }
+  };
+  const so = $('#syncLogout');
+  if (so) so.onclick = async () => {
+    if (!confirm('ログアウトすると同期が止まります（この PC のデータは残ります）。よろしいですか？')) return;
+    try { await api('POST', 'sync/logout'); render(); } catch (err) { fail(err); }
   };
   $('#ruleForm').onsubmit = async e => {
     e.preventDefault();
@@ -1302,7 +1340,36 @@ async function checkReminders() {
   } catch (e) { /* server may be stopped */ }
 }
 
+// True while the user has unsaved text in a focused field (don't re-render then).
+function typingSomething() {
+  const el = document.activeElement;
+  return !!el && ['INPUT', 'TEXTAREA'].includes(el.tagName) && el.type !== 'checkbox' && el.value.trim() !== '';
+}
+
+// Sync status badge; refreshes the view when changes arrive from the web version.
+const SYNC_TEXT = { synced: '同期済み', syncing: '同期中', offline: 'オフライン', error: '同期エラー', off: '同期オフ' };
+let lastChanges = null;
+function updateSync(st) {
+  const b = $('#syncBadge');
+  const status = st.logged_in ? st.state : 'off';
+  const icon = { synced: '✓', syncing: '↻', offline: '⚡', error: '⚠', off: '▢' }[status] || '';
+  b.innerHTML = `<span>${icon}</span><span class="t"> ${esc(SYNC_TEXT[status] || status)}${st.pending && status !== 'syncing' ? `（未送信 ${st.pending}）` : ''}</span>`;
+  b.dataset.status = status;
+  b.title = st.error || SYNC_TEXT[status] || '';
+  if (lastChanges !== null && st.changes !== lastChanges) {
+    const editing = !$('#modal').hidden || /^#\/(notes\/|sheets\/|settings)/.test(location.hash) ||
+      typingSomething();
+    if (!editing) render();
+  }
+  lastChanges = st.changes;
+}
+async function pollSync() {
+  try { updateSync(await GET('sync')); } catch (e) { /* server stopped */ }
+}
+
 applyTheme();
 render();
+pollSync();
+setInterval(pollSync, 5000);
 checkReminders();
 setInterval(checkReminders, 30000);

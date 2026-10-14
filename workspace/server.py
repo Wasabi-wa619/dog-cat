@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import mail
+from . import mail, sync
 from .db import Database
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -48,6 +48,7 @@ class Workspace:
         self.files_root.mkdir(parents=True, exist_ok=True)
         self.db = Database(self.data_dir / "workspace.db")
         self._lock = threading.Lock()
+        self.syncer = sync.Syncer(self)
 
     # ---- tasks ----------------------------------------------------------
 
@@ -215,6 +216,7 @@ class Workspace:
         if dst.exists():
             raise ApiError(409, "同じ名前が既に存在します")
         src.rename(dst)
+        self.syncer.remap(self.rel(src), self.rel(dst))
         return {"path": self.rel(dst)}
 
     def move(self, rel, folder_rel):
@@ -226,6 +228,7 @@ class Workspace:
             raise ApiError(400, "フォルダを自身の中には移動できません")
         dst = self.unique(folder / src.name)
         shutil.move(str(src), str(dst))
+        self.syncer.remap(self.rel(src), self.rel(dst))
         return {"path": self.rel(dst)}
 
     def delete_file(self, rel):
@@ -262,6 +265,7 @@ class Workspace:
                 name = stamp + name
             target = self.unique(dest / name)
             shutil.move(str(p), str(target))
+            self.syncer.remap(self.rel(p), self.rel(target))
             moved.append({"from": self.rel(p), "to": self.rel(target)})
         return {"moved": moved}
 
@@ -458,6 +462,8 @@ def make_handler(ws, port):
                     self.guard_write()
                 parts = [p for p in url.path.split("/")[2:] if p]
                 result = self.route(method, parts, q)
+                if method != "GET" and parts[:1] not in (["sync"], ["mail"]):
+                    ws.syncer.poke()
                 if result is not None:
                     self.send_json(result)
             except ApiError as exc:
@@ -523,6 +529,8 @@ def make_handler(ws, port):
                 return None
             if head == "files":
                 return self.route_files(method, rest, q)
+            if head == "sync":
+                return self.route_sync(method, rest)
             if head == "mail":
                 return self.route_mail(method, rest, q)
             raise ApiError(404, "not found")
@@ -606,6 +614,24 @@ def make_handler(ws, port):
                 return ws.delete_file(q.get("path", ""))
             raise ApiError(404, "not found")
 
+        def route_sync(self, method, rest):
+            action = rest[0] if rest else ""
+            if method == "GET" and action == "":
+                return ws.syncer.status()
+            if method == "POST" and action == "login":
+                d = self.read_json()
+                try:
+                    return ws.syncer.login(d.get("email", ""), d.get("password", ""))
+                except sync.SyncError as exc:
+                    raise ApiError(400, str(exc))
+            if method == "POST" and action == "logout":
+                ws.syncer.logout()
+                return ws.syncer.status()
+            if method == "POST" and action == "now":
+                ws.syncer.sync_once()
+                return ws.syncer.status()
+            raise ApiError(404, "not found")
+
         def route_mail(self, method, rest, q):
             cfg = ws.db.get_settings()["mail"]
             action = rest[0] if rest else ""
@@ -635,6 +661,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     ws = Workspace(args.data)
+    ws.syncer.start()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(ws, args.port))
     url = "http://127.0.0.1:%d/" % args.port
     print("My Workspace: %s  (data: %s)  Ctrl+C で終了" % (url, ws.data_dir))

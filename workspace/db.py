@@ -5,6 +5,7 @@ plain file copy.
 """
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 
 SCHEMA = """
@@ -60,6 +61,21 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Sync bookkeeping (see sync.py)
+CREATE TABLE IF NOT EXISTS tombstones (
+    coll TEXT NOT NULL,
+    rid TEXT NOT NULL,
+    PRIMARY KEY (coll, rid)
+);
+CREATE TABLE IF NOT EXISTS file_map (
+    rid TEXT PRIMARY KEY,
+    path TEXT NOT NULL UNIQUE,
+    dir INTEGER NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    mtime_ns INTEGER NOT NULL DEFAULT 0,
+    chunks INTEGER NOT NULL DEFAULT 0,
+    meta_dirty INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # Writable columns per table, with the type each value is coerced to.
@@ -104,11 +120,25 @@ class Database:
         self.path = str(path)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            # Sync columns: rid = id of the record in the cloud, dirty = local
+            # change counter (0 = in sync). Added to databases created earlier.
+            for table in TABLES:
+                cols = {r["name"] for r in conn.execute("PRAGMA table_info(%s)" % table)}
+                if "rid" not in cols:
+                    conn.execute("ALTER TABLE %s ADD COLUMN rid TEXT" % table)
+                    conn.execute("ALTER TABLE %s ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1" % table)
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS %s_rid ON %s(rid)" % (table, table))
 
+    @contextmanager
     def connect(self):
-        conn = sqlite3.connect(self.path)
+        """Connection that commits on success and is always closed."""
+        conn = sqlite3.connect(self.path, timeout=30)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # ---- generic CRUD -------------------------------------------------
 
@@ -165,7 +195,7 @@ class Database:
         if not values:
             return self.get(table, item_id)
         values["updated"] = now()
-        sets = ", ".join("%s = ?" % _quote(c) for c in values)
+        sets = ", ".join("%s = ?" % _quote(c) for c in values) + ", dirty = dirty + 1"
         with self.connect() as conn:
             cur = conn.execute("UPDATE %s SET %s WHERE id = ?" % (table, sets),
                                list(values.values()) + [item_id])
@@ -175,16 +205,35 @@ class Database:
 
     def delete(self, table, item_id):
         with self.connect() as conn:
-            cur = conn.execute("DELETE FROM %s WHERE id = ?" % table, (item_id,))
-            return cur.rowcount > 0
+            row = conn.execute("SELECT rid FROM %s WHERE id = ?" % table, (item_id,)).fetchone()
+            if row is None:
+                return False
+            if row["rid"]:
+                conn.execute("INSERT OR IGNORE INTO tombstones (coll, rid) VALUES (?, ?)", (table, row["rid"]))
+            conn.execute("DELETE FROM %s WHERE id = ?" % table, (item_id,))
+            return True
 
     # ---- settings -----------------------------------------------------
+
+    def get_value(self, key, default=None):
+        with self.connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return json.loads(row["value"]) if row else default
+
+    def set_value(self, key, value):
+        with self.connect() as conn:
+            if value is None:
+                conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            else:
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                             (key, json.dumps(value, ensure_ascii=False)))
 
     def get_settings(self):
         settings = json.loads(json.dumps(DEFAULT_SETTINGS))
         with self.connect() as conn:
             for row in conn.execute("SELECT key, value FROM settings"):
-                settings[row["key"]] = json.loads(row["value"])
+                if row["key"] in DEFAULT_SETTINGS:
+                    settings[row["key"]] = json.loads(row["value"])
         for key, default in DEFAULT_SETTINGS.items():
             if isinstance(default, dict):
                 merged = dict(default)

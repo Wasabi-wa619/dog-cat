@@ -1471,6 +1471,12 @@ function setSyncBadge(status) {
   b.dataset.status = status;
 }
 
+// True while the user has unsaved text in a focused field (don't re-render then).
+function typingSomething() {
+  const el = document.activeElement;
+  return !!el && ['INPUT', 'TEXTAREA'].includes(el.tagName) && el.type !== 'checkbox' && el.value.trim() !== '';
+}
+
 let started = false;
 async function start() {
   const mode = getMode();
@@ -1505,7 +1511,7 @@ async function start() {
   // Changes from other devices: refresh the view unless the user is mid-edit.
   store.onRemoteChange(debounce(() => {
     const editing = !$('#modal').hidden || /^#\/(notes\/|sheets\/)/.test(location.hash) ||
-      ['INPUT', 'TEXTAREA'].includes((document.activeElement || {}).tagName);
+      typingSomething();
     if (!editing) render();
   }, 400));
 

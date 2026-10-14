@@ -1,6 +1,6 @@
 /* Service worker: serves the app shell from cache so the app opens offline.
  * Bump VERSION whenever app files change so devices pick up the update. */
-const VERSION = 'v1';
+const VERSION = 'v3';
 const CACHE = 'workspace-' + VERSION;
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'api.js', 'store.js', 'config.js',
   'vendor/firebase.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
