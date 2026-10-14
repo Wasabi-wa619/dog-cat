@@ -190,5 +190,19 @@ class ServerTest(unittest.TestCase):
         self.assertIn("files/a.txt", names)
 
 
+    def test_export_for_web(self):
+        self.req("POST", "/api/tasks", {"title": "移行"})
+        self.req("POST", "/api/files/mkdir", {"path": "", "name": "書類"})
+        self.req("POST", "/api/files/upload?path=%E6%9B%B8%E9%A1%9E&name=a.txt", b"abc")
+        status, body, _ = self.req("GET", "/api/export", raw=True)
+        data = json.loads(body)
+        self.assertEqual(data["format"], "myworkspace")
+        self.assertEqual(data["collections"]["tasks"][0]["title"], "移行")
+        folder = next(f for f in data["files"] if f["dir"])
+        f = next(f for f in data["files"] if not f["dir"])
+        self.assertEqual(f["parent"], folder["id"])
+        self.assertEqual(folder["parent"], "")
+        self.assertEqual(f["data"], "YWJj")
+
 if __name__ == "__main__":
     unittest.main()

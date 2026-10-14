@@ -1,0 +1,10 @@
+rules_version = '2';
+// My Workspace: each signed-in user can only read and write their own data
+// (users/{自分のuid}/...). Paste this into Firebase console > Firestore > Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

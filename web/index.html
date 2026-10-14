@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Workspace</title>
+<meta name="theme-color" content="#3b6ef5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6ef5'/%3E%3Cpath d='M8 10h16M8 16h16M8 22h10' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="login" class="login"></div>
+<div class="app" hidden>
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">My Workspace</div>
+    <a href="#/dashboard" data-route="dashboard"><span class="ic">◎</span>ホーム</a>
+    <a href="#/tasks" data-route="tasks"><span class="ic">✓</span>タスク</a>
+    <a href="#/calendar" data-route="calendar"><span class="ic">▦</span>カレンダー</a>
+    <a href="#/notes" data-route="notes"><span class="ic">✎</span>メモ</a>
+    <a href="#/sheets" data-route="sheets"><span class="ic">▤</span>シート</a>
+    <a href="#/files" data-route="files"><span class="ic">▣</span>ファイル</a>
+    <a href="#/mail" data-route="mail"><span class="ic">✉</span>メール</a>
+    <div class="spacer"></div>
+    <a href="#/settings" data-route="settings"><span class="ic">⚙</span>設定</a>
+  </nav>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="メニュー">☰</button>
+      <form id="searchForm" class="search">
+        <input id="searchInput" type="search" placeholder="すべてを検索（/ キー）" autocomplete="off">
+      </form>
+      <a href="#/settings" class="sync" id="syncBadge"></a>
+      <button class="btn primary" id="quickAdd" title="クイック追加（N キー）">＋ 追加</button>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+</div>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -3,8 +3,10 @@
 Run:  python -m workspace            (then open http://127.0.0.1:8765)
 """
 import argparse
+import base64
 import calendar
 import csv
+import hashlib
 import io
 import json
 import mimetypes
@@ -315,6 +317,30 @@ class Workspace:
 
     # ---- settings ---------------------------------------------------------
 
+    def export_json(self):
+        """Export everything in the format the web version imports."""
+        prefix = {"tasks": "t", "events": "e", "notes": "n", "templates": "m", "sheets": "s"}
+        out = {"format": "myworkspace", "version": 1, "exported": datetime.now().isoformat(timespec="seconds"),
+               "collections": {}, "files": []}
+        for table, p in prefix.items():
+            out["collections"][table] = [dict(r, id="local-%s%d" % (p, r["id"])) for r in self.db.list(table)]
+        s = self.db.get_settings()
+        out["settings"] = {"file_rules": s["file_rules"], "file_name_prefix_date": s["file_name_prefix_date"]}
+        fid = lambda rel: "local-f" + hashlib.sha1(rel.encode("utf-8")).hexdigest()[:16] if rel else ""
+        for p in sorted(self.files_root.rglob("*")):
+            rel = self.rel(p)
+            if rel.split("/")[0] == ".trash" or p.name.startswith("."):
+                continue
+            parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            rec = {"id": fid(rel), "name": p.name, "parent": fid(parent), "dir": p.is_dir(),
+                   "modified": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
+            if p.is_file():
+                rec["size"] = p.stat().st_size
+                rec["type"] = mimetypes.guess_type(p.name)[0] or ""
+                rec["data"] = base64.b64encode(p.read_bytes()).decode("ascii")
+            out["files"].append(rec)
+        return out
+
     def public_settings(self):
         s = self.db.get_settings()
         s["mail"] = dict(s["mail"])
@@ -486,6 +512,10 @@ def make_handler(ws, port):
                     return ws.public_settings()
                 if method == "PUT":
                     return ws.save_settings(self.read_json())
+            if head == "export" and method == "GET":
+                body = json.dumps(ws.export_json(), ensure_ascii=False).encode()
+                self.send_bytes(body, "application/json", "workspace-export.json")
+                return None
             if head == "backup" and method == "GET":
                 stamp = datetime.now().strftime("%Y%m%d-%H%M")
                 self.send_bytes(ws.backup(), "application/zip",

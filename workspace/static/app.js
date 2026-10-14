@@ -1150,6 +1150,8 @@ routes.settings = async () => {
         <h2 style="margin-top:18px">バックアップ</h2>
         <p class="muted small">データベースと全ファイルを ZIP でダウンロードします。</p>
         <a class="btn" href="/api/backup">バックアップをダウンロード</a>
+        <p class="muted small" style="margin-top:10px">Web 版へ移行: 書き出したファイルを Web 版の「設定 → 読み込み」で取り込めます。</p>
+        <a class="btn" href="/api/export">Web 版用に書き出し</a>
         <h2 style="margin-top:18px">ショートカット</h2>
         <p class="small muted">/ 検索 ・ N クイック追加 ・ G→H/T/C/M/S/F/E 各画面へ移動</p>
       </section>
